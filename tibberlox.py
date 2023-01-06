@@ -144,8 +144,8 @@ def get_price_dictionary(tibber_account, home_id):
         # Assume there is never more than 23 values in the past and never more than
         # 36 values in the future. First store all values in an invalid state.
         invalid_state_value = -1000
-        for i in range(-23, 0):
-            price_information[f"data_price_hour_rel_-{abs(i):02}_amount"] = invalid_state_value
+        for i in range(23, 0, -1):
+            price_information[f"data_price_hour_rel_-{i:02}_amount"] = invalid_state_value
 
         for i in range(36):
             price_information[f"data_price_hour_rel_{i:02}_amount"] = invalid_state_value
