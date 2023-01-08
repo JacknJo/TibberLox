@@ -18,11 +18,13 @@ logger = None
 # This value will be sent if no valid data is available for a relative entry.
 invalid_data_value = -1000
 
+
 def setup_logger():
 
     class CustomFormatter(logging.Formatter):
         def format(self, record):
-            record.msg = self.formatTime(record, "%H:%M:%S") + '.' +  str(int(record.msecs)) + ' ' + record.levelname[0] + ' | ' + record.msg
+            record.msg = self.formatTime(record, "%H:%M:%S") + '.' + str(int(record.msecs)
+                                                                         ) + ' ' + record.levelname[0] + ' | ' + record.msg
             return super().format(record)
 
     global logger
@@ -52,9 +54,11 @@ def load_or_create_json_config(config_file_name, skip_destination_ping=False):
     max_port_number = 2**16-1
 
     while destination_not_reachable:
-        destination_ips = input("Please enter your destination IPs or hostnames of the (Miniserver) in a comma seperated list with the port appended seperated by ':'.\n  e.g. 192.168.168.10:55555, 192.168.168.99:34633\n\n > ")
+        destination_ips = input(
+            "Please enter your destination IPs or hostnames of the (Miniserver) in a comma seperated list with the port appended seperated by ':'.\n  e.g. 192.168.168.10:55555, 192.168.168.99:34633\n\n > ")
         destination_ip_port_tuples = [s.strip() for s in destination_ips.split(',')]
-        if len(destination_ip_port_tuples) < 1: continue
+        if len(destination_ip_port_tuples) < 1:
+            continue
 
         destinations = []
         all_ips_valid = True
@@ -130,6 +134,7 @@ def get_time_dictionary():
     time_information["date_now_year"] = today.year
     return time_information
 
+
 def format_price(price, price_multiplier, precicion):
     return round(price * price_multiplier, precicion)
 
@@ -161,7 +166,8 @@ def get_price_dictionary(tibber_account, home_id, target_price_unit, no_invalid_
     price_information["price_unit"] = "EUR" if target_price_unit_is_eur else "Cent"
 
     logger.info(f"Sending price information in '{price_information['price_unit']}'.")
-    logger.info(f"Overview: {{ current: {price_information['price_current']}, avg: {price_information['price_average']}, low: {price_information['price_low']}, high: {price_information['price_high']} }}")
+    logger.info(
+        f"Overview: {{ current: {price_information['price_current']}, avg: {price_information['price_average']}, low: {price_information['price_low']}, high: {price_information['price_high']} }}")
 
     prices_total_sorted = sorted(prices_total)
     for i, p in enumerate(prices_total_sorted):
@@ -195,7 +201,8 @@ def get_price_dictionary(tibber_account, home_id, target_price_unit, no_invalid_
         else:
             number_of_valid_positive_relatives += 1
 
-        price_information[f"data_price_hour_rel_{sign}{abs(delta_hour):02}_amount"] = format_price(price_info.total, price_multiplier, precicion)
+        price_information[f"data_price_hour_rel_{sign}{abs(delta_hour):02}_amount"] = format_price(
+            price_info.total, price_multiplier, precicion)
 
     price_information["data_price_hour_rel_num_negatives"] = number_of_valid_negative_relatives
     price_information["data_price_hour_rel_num_positives"] = number_of_valid_positive_relatives
@@ -245,10 +252,14 @@ if __name__ == '__main__':
     choice_map = {"DEBUG": logging.DEBUG, "INFO": logging.INFO, "WARNING": logging.WARNING, "ERROR": logging.ERROR}
     parser.add_argument('-l', '--log', help="Logging level for the application.",
                         choices=choice_map.keys(), default="INFO")
-    parser.add_argument('-c', '--config', help=f"The filename of the configuration file in use, relative to {script_dir}", type=str, default=".tibberlox_config")
-    parser.add_argument('--no-ping-check', help='Skip the validation of entered ip addresses by using the ping command.', action="store_true")
-    parser.add_argument('--no-invalid-values', help=f'By default all relative value fileds are sent, even if no data is available. Invalid data is indicated by a value of {invalid_data_value}.', action="store_true")
-    parser.add_argument('--price-unit', help="The price unit sent in the UDP interface", choices=["EUR", "Cent"], default="EUR")
+    parser.add_argument(
+        '-c', '--config', help=f"The filename of the configuration file in use, relative to {script_dir}", type=str, default=".tibberlox_config")
+    parser.add_argument(
+        '--no-ping-check', help='Skip the validation of entered ip addresses by using the ping command.', action="store_true")
+    parser.add_argument('--no-invalid-values',
+                        help=f'By default all relative value fileds are sent, even if no data is available. Invalid data is indicated by a value of {invalid_data_value}.', action="store_true")
+    parser.add_argument('--price-unit', help="The price unit sent in the UDP interface",
+                        choices=["EUR", "Cent"], default="EUR")
     args = parser.parse_args()
 
     logger.setLevel(choice_map[args.log])
@@ -259,7 +270,8 @@ if __name__ == '__main__':
     # tibber_account.send_push_notification("My title", "Hello! I'm a message!")
 
     time_dict = get_time_dictionary()
-    price_dict = get_price_dictionary(tibber_account, config["home_id"], args.price_unit, no_invalid_values=args.no_invalid_values)
+    price_dict = get_price_dictionary(
+        tibber_account, config["home_id"], args.price_unit, no_invalid_values=args.no_invalid_values)
     power_dict = get_power_dictionary(tibber_account, config)
 
     information_to_be_sent = merge_dictionaries([time_dict, price_dict, power_dict])
