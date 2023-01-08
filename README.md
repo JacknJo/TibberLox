@@ -33,9 +33,9 @@ und im Textfeld folgende Zeile einfügen. Der Python Pfad muss mit dem Output vo
 ```
 
 ### Konfiguration
-Das Script fragt beim ersten Start nach den Konfigurationsparametern, die für den Zugang zur Tibber-API notwendig sind. Ebenso müssen IP und Port der Zieladresse angegeben werden. Die Informationen werden unter Zugangscode `0400` schreibgeschützt und nur für den Nutzer lesbar auf dem Dateisystem parallel zum `tibberlox.py` Skript unter dem Namen `.tibber_credentials` abgelegt.
+Das Script fragt beim ersten Start nach den Konfigurationsparametern, die für den Zugang zur Tibber-API notwendig sind. Ebenso müssen IP und Port der Zieladresse angegeben werden. Die Informationen werden unter Zugangscode `0400` schreibgeschützt und nur für den Nutzer lesbar auf dem Dateisystem parallel zum `tibberlox.py` Skript unter dem Namen `.tibberlox_config` abgelegt.
 
-Die Datei `.tibber_credentials` kann auch manuell von `demo_tibber_credentials` kopiert, modifiziert und unter dem Namen `.tibber_credentials` abgelegt werden. Damit kann der Konfigurationsschritt umgangen werden.
+Die Datei `.tibberlox_config` kann auch manuell von `demo_tibberlox_config` kopiert, modifiziert und unter dem Namen `.tibberlox_config` abgelegt werden. Damit kann der Konfigurationsschritt umgangen werden.
 
 ### Manuelle Benutzung
 
@@ -96,9 +96,9 @@ In the promt add the following line. Attention! The python path must match the o
 ```
 
 ### Configuration
-At first invocation the script prompts for configuration parameters necessary for the runtime. These include the Tibber-API Token as the destination ip and port touple(s). Those settings will be saved in a file called `.tibber_credentials` parallel to the `tibberlox.py`-script with access modifier `0400` in a write protected manner and only readable to the user.
+At first invocation the script prompts for configuration parameters necessary for the runtime. These include the Tibber-API Token as the destination ip and port touple(s). Those settings will be saved in a file called `.tibberlox_config` parallel to the `tibberlox.py`-script with access modifier `0400` in a write protected manner and only readable to the user.
 
-If you want to skip the configuration process, just copy the `demo_tibber_credentials` modify the fields as desired and write it to `.tibber_credentials` next to the `tibberlox.py` script. As long as this script exists and is readable, the prompt will not show up.
+If you want to skip the configuration process, just copy the `demo_tibberlox_config` modify the fields as desired and write it to `.tibberlox_config` next to the `tibberlox.py` script. As long as this file exists and is readable, the prompt will not show up.
 
 
 ### Manual Usage

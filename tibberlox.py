@@ -13,23 +13,41 @@ import statistics
 import datetime
 import argparse
 
+logger = None
+
+# This value will be sent if no valid data is available for a relative entry.
+invalid_data_value = -1000
+
+def setup_logger():
+
+    class CustomFormatter(logging.Formatter):
+        def format(self, record):
+            record.msg = self.formatTime(record, "%H:%M:%S") + '.' +  str(int(record.msecs)) + ' ' + record.levelname[0] + ' | ' + record.msg
+            return super().format(record)
+
+    global logger
+    logger = logging.getLogger(__name__)
+    stream_handler = logging.StreamHandler()
+    formatter = CustomFormatter('%(message)s')
+    stream_handler.setFormatter(formatter)
+    logger.addHandler(stream_handler)
+
 
 def home_to_string(home):
     return f"{home.address1}, {home.postal_code} {home.city}, {home.country}"
 
 
-def load_or_create_json_config(file_name):
-    if os.path.exists(file_name):
+def load_or_create_json_config(config_file_name, skip_destination_ping=False):
+    if os.path.exists(config_file_name):
         try:
-            with open(file_name, "r") as f:
-                logging.info(f"Loading credentials from: {file_name}")
+            with open(config_file_name, "r") as f:
+                logger.info(f"Loading credentials from: {config_file_name}")
                 return json.load(f)
         except Exception as e:
-            logging.fatal(
-                f"Failed to read credentials from {file_name}. Please check permissions or delete the credentials file and re-run the script.")
+            logger.fatal(
+                f"Failed to read credentials from {config_file_name}. Please check permissions or delete the credentials file and re-run the script.")
             sys.exit(1)
 
-    logging.info(f"Loading credentials from: {file_name}")
     destination_not_reachable = True
     max_port_number = 2**16-1
 
@@ -43,11 +61,12 @@ def load_or_create_json_config(file_name):
         try:
             for ip_port in destination_ip_port_tuples:
                 ip, port = ip_port.split(':')
-                error, output = subprocess.getstatusoutput("ping -c 1 -w 1 " + ip)
-                if error:
-                    logging.error(output)
-                    all_ips_valid = False
-                    break
+                if skip_destination_ping:
+                    error, output = subprocess.getstatusoutput("ping -c 1 -w 1 " + ip)
+                    if error:
+                        logger.error(output)
+                        all_ips_valid = False
+                        break
 
                 port = int(port)
                 if port > max_port_number or port < 1:
@@ -59,7 +78,7 @@ def load_or_create_json_config(file_name):
                 destination_not_reachable = False
 
         except Exception as e:
-            logging.error(e)
+            logger.error(e)
 
     token_invalid = True
     while (token_invalid):
@@ -68,9 +87,8 @@ def load_or_create_json_config(file_name):
         try:
             account = tibber.Account(token)
             token_invalid = False
-        except:
-            logging.error(
-                "Can't authenticate to tibber by using this token. Please check the validity of the token and ensure a connection to the internet is available.")
+        except Exception as e:
+            logger.error(e)
 
     invalid_home_selected = True
     while invalid_home_selected:
@@ -83,7 +101,7 @@ def load_or_create_json_config(file_name):
                 raise ValueError(f"The given id {home_id} is not in the valid range [0-{max_len}].")
             invalid_home_selected = False
         except Exception as e:
-            logging.error(e)
+            logger.error(e)
 
     config = {}
     config["destinations"] = destinations
@@ -91,12 +109,12 @@ def load_or_create_json_config(file_name):
     config["token"] = token
     config["home_id"] = home_id
 
-    with open(file_name, "w") as f:
+    with open(config_file_name, "w") as f:
         json.dump(config, f, indent=4)
-        logging.info(f"Stored credentials in {file_name}")
+        logger.info(f"Stored credentials in {config_file_name}")
 
     # Set the credentials to be write protected and readable for the user only.
-    os.chmod(file_name, 0o400)
+    os.chmod(config_file_name, 0o400)
 
     return config
 
@@ -113,7 +131,7 @@ def get_time_dictionary():
     return time_information
 
 
-def get_price_dictionary(tibber_account, home_id):
+def get_price_dictionary(tibber_account, home_id, no_invalid_values=False):
     subscription = tibber_account.homes[home_id].current_subscription
     price_info_today = subscription.price_info.today
     prices_total = [p.total for p in price_info_today]
@@ -139,23 +157,21 @@ def get_price_dictionary(tibber_account, home_id):
     now = datetime.datetime.now()
 
     # Setting this variable to False will cause to only valid send valid values and skip the placeholders.
-    always_send_invalid_values = True
-    if always_send_invalid_values:
+    if not no_invalid_values:
         # Assume there is never more than 23 values in the past and never more than
         # 36 values in the future. First store all values in an invalid state.
-        invalid_state_value = -1000
         for i in range(23, 0, -1):
-            price_information[f"data_price_hour_rel_-{i:02}_amount"] = invalid_state_value
+            price_information[f"data_price_hour_rel_-{i:02}_amount"] = invalid_data_value
 
         for i in range(36):
-            price_information[f"data_price_hour_rel_{i:02}_amount"] = invalid_state_value
+            price_information[f"data_price_hour_rel_+{i:02}_amount"] = invalid_data_value
 
     number_of_valid_negative_relatives = 0
     number_of_valid_positive_relatives = 0
     for i, price_info in enumerate(price_information_available):
         isoformat = datetime.datetime.fromisoformat(price_info.starts_at).replace(tzinfo=None)
         delta_hour = math.ceil((isoformat - now).total_seconds()/3600)
-        sign = '-' if delta_hour < 0 else ''
+        sign = '-' if delta_hour < 0 else '+'
         if delta_hour < 0:
             number_of_valid_negative_relatives += 1
         else:
@@ -197,27 +213,34 @@ def send_to_destination(config, key_value_dictionary):
         bytes_sent = s.sendto(string_to_be_sent_encoded, dst)
 
         if bytes_sent < len(string_to_be_sent):
-            logging.error("Failed to send the information to " + dst)
+            logger.error("Failed to send the information to " + dst)
         else:
-            logging.info(f"Sent {bytes_sent} bytes to {dst}")
-            logging.debug(f"Sent the following string:\n" + string_to_be_sent_formatted)
+            logger.info(f"Sent {bytes_sent} bytes to {dst}")
+            logger.debug(f"Sent the following string:\n" + string_to_be_sent_formatted)
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-l', '--log', help="Logging level for the application (default=INFO)",
-                        choices=["DEBUG", "INFO", "WARNING", "ERROR"], default="INFO")
+    setup_logger()
+
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    choice_map = {"DEBUG": logging.DEBUG, "INFO": logging.INFO, "WARNING": logging.WARNING, "ERROR": logging.ERROR}
+    parser.add_argument('-l', '--log', help="Logging level for the application.",
+                        choices=choice_map.keys(), default="INFO")
+    parser.add_argument('-c', '--config', help=f"The filename of the conifguration file in use, relative to {script_dir}", type=str, default=".tibberlox_config")
+    parser.add_argument('--no-ping-check', help='Skip the validation of entered ip addresses by using the ping command.', action="store_true")
+    parser.add_argument('--no-invalid-values', help=f'By default all relative value fileds are sent, even if no data is available. Invalid data is indicated by a value of {invalid_data_value}.', action="store_true")
     args = parser.parse_args()
 
-    choice_map = {"DEBUG": logging.DEBUG, "INFO": logging.INFO, "WARNING": logging.WARNING, "ERROR": logging.ERROR}
-    logging.getLogger().setLevel(choice_map[args.log])
+    logger.setLevel(choice_map[args.log])
 
-    credentials_dir = os.path.dirname(os.path.abspath(__file__))
-    config = load_or_create_json_config(os.path.join(credentials_dir, ".tibber_credentials"))
+    config = load_or_create_json_config(os.path.join(script_dir, args.config), skip_destination_ping=args.no_ping_check)
 
     tibber_account = tibber.Account(config["token"])
+    # tibber_account.send_push_notification("My title", "Hello! I'm a message!")
+
     time_dict = get_time_dictionary()
-    price_dict = get_price_dictionary(tibber_account, config["home_id"])
+    price_dict = get_price_dictionary(tibber_account, config["home_id"], no_invalid_values=args.no_invalid_values)
     power_dict = get_power_dictionary(tibber_account, config)
 
     information_to_be_sent = merge_dictionaries([time_dict, price_dict, power_dict])
