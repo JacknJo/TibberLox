@@ -130,20 +130,38 @@ def get_time_dictionary():
     time_information["date_now_year"] = today.year
     return time_information
 
+def format_price(price, price_multiplier, precicion):
+    return round(price * price_multiplier, precicion)
 
-def get_price_dictionary(tibber_account, home_id, no_invalid_values=False):
+
+def get_price_dictionary(tibber_account, home_id, target_price_unit, no_invalid_values=False, precicion=4):
     subscription = tibber_account.homes[home_id].current_subscription
     price_info_today = subscription.price_info.today
-    prices_total = [p.total for p in price_info_today]
+
+    euro_list = ["EUR", "EURO", "€"]
+    is_euro = subscription.price_info.current.currency in euro_list
+    target_price_unit_is_eur = target_price_unit in euro_list
+
+    price_multiplier_matrix = [
+        [1, 0.01],
+        [100, 1]
+    ]
+    price_multiplier = price_multiplier_matrix[is_euro][target_price_unit_is_eur]
+
+    prices_total = [format_price(p.total, price_multiplier, precicion) for p in price_info_today]
+    price_current = format_price(subscription.price_info.current.total, price_multiplier, precicion)
 
     price_information = {}
     price_information["price_low"] = min(prices_total)
     price_information["price_high"] = max(prices_total)
-    price_information["price_median"] = statistics.median(prices_total)
-    price_information["price_average"] = statistics.mean(prices_total)
-    price_information["price_stdev"] = statistics.stdev(prices_total)
-    price_information["price_current"] = subscription.price_info.current.total
-    price_information["price_unit"] = subscription.price_info.current.currency
+    price_information["price_median"] = round(statistics.median(prices_total), precicion)
+    price_information["price_average"] = round(statistics.mean(prices_total), precicion)
+    price_information["price_stdev"] = round(statistics.stdev(prices_total), precicion)
+    price_information["price_current"] = price_current
+    price_information["price_unit"] = "EUR" if target_price_unit_is_eur else "Cent"
+
+    logger.info(f"Sending price information in '{price_information['price_unit']}'.")
+    logger.info(f"Overview: {{ current: {price_information['price_current']}, avg: {price_information['price_average']}, low: {price_information['price_low']}, high: {price_information['price_high']} }}")
 
     prices_total_sorted = sorted(prices_total)
     for i, p in enumerate(prices_total_sorted):
@@ -177,7 +195,7 @@ def get_price_dictionary(tibber_account, home_id, no_invalid_values=False):
         else:
             number_of_valid_positive_relatives += 1
 
-        price_information[f"data_price_hour_rel_{sign}{abs(delta_hour):02}_amount"] = price_info.total
+        price_information[f"data_price_hour_rel_{sign}{abs(delta_hour):02}_amount"] = format_price(price_info.total, price_multiplier, precicion)
 
     price_information["data_price_hour_rel_num_negatives"] = number_of_valid_negative_relatives
     price_information["data_price_hour_rel_num_positives"] = number_of_valid_positive_relatives
@@ -230,6 +248,7 @@ if __name__ == '__main__':
     parser.add_argument('-c', '--config', help=f"The filename of the conifguration file in use, relative to {script_dir}", type=str, default=".tibberlox_config")
     parser.add_argument('--no-ping-check', help='Skip the validation of entered ip addresses by using the ping command.', action="store_true")
     parser.add_argument('--no-invalid-values', help=f'By default all relative value fileds are sent, even if no data is available. Invalid data is indicated by a value of {invalid_data_value}.', action="store_true")
+    parser.add_argument('--price-unit', help="The price unit sent in the UDP interface", choices=["EUR", "Cent"], default="EUR")
     args = parser.parse_args()
 
     logger.setLevel(choice_map[args.log])
@@ -240,7 +259,7 @@ if __name__ == '__main__':
     # tibber_account.send_push_notification("My title", "Hello! I'm a message!")
 
     time_dict = get_time_dictionary()
-    price_dict = get_price_dictionary(tibber_account, config["home_id"], no_invalid_values=args.no_invalid_values)
+    price_dict = get_price_dictionary(tibber_account, config["home_id"], args.price_unit, no_invalid_values=args.no_invalid_values)
     power_dict = get_power_dictionary(tibber_account, config)
 
     information_to_be_sent = merge_dictionaries([time_dict, price_dict, power_dict])
