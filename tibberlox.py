@@ -245,7 +245,7 @@ if __name__ == '__main__':
     choice_map = {"DEBUG": logging.DEBUG, "INFO": logging.INFO, "WARNING": logging.WARNING, "ERROR": logging.ERROR}
     parser.add_argument('-l', '--log', help="Logging level for the application.",
                         choices=choice_map.keys(), default="INFO")
-    parser.add_argument('-c', '--config', help=f"The filename of the conifguration file in use, relative to {script_dir}", type=str, default=".tibberlox_config")
+    parser.add_argument('-c', '--config', help=f"The filename of the configuration file in use, relative to {script_dir}", type=str, default=".tibberlox_config")
     parser.add_argument('--no-ping-check', help='Skip the validation of entered ip addresses by using the ping command.', action="store_true")
     parser.add_argument('--no-invalid-values', help=f'By default all relative value fileds are sent, even if no data is available. Invalid data is indicated by a value of {invalid_data_value}.', action="store_true")
     parser.add_argument('--price-unit', help="The price unit sent in the UDP interface", choices=["EUR", "Cent"], default="EUR")
