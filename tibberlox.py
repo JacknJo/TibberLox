@@ -144,8 +144,8 @@ def get_price_dictionary(tibber_account, home_id, target_price_unit, no_invalid_
     price_info_today = subscription.price_info.today
 
     euro_list = ["EUR", "EURO", "€"]
-    is_euro = subscription.price_info.current.currency in euro_list
-    target_price_unit_is_eur = target_price_unit in euro_list
+    is_euro = subscription.price_info.current.currency.upper() in euro_list
+    target_price_unit_is_eur = target_price_unit.upper() in euro_list
 
     price_multiplier_matrix = [
         [1, 0.01],
