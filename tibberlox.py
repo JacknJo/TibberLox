@@ -216,7 +216,7 @@ def get_price_dictionary(tibber_account, home_id, target_price_in_euro, no_inval
     price_information["price_stdev"] = round(statistics.stdev(prices_total), precicion)
     price_information["price_current"] = price_current
     price_information["price_unit"] = "EUR" if target_price_in_euro else "Cent"
-    price_information["price_multiplicator_to_eur"] = 1 if target_price_in_euro else 100
+    price_information["price_multiplicator_to_eur"] = 1 if target_price_in_euro else 0.01
 
     logger.info(f"Sending price information in '{price_information['price_unit']}'.")
     logger.info(
