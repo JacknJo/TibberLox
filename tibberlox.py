@@ -312,22 +312,6 @@ class SortedDefaultsHelpFormatter(argparse.ArgumentDefaultsHelpFormatter):
         super(argparse.ArgumentDefaultsHelpFormatter, self).add_arguments(actions)
 
 
-def validate_args(args):
-    bounds = (0, 35)
-    if args.future < bounds[0] or args.future > bounds[1]:
-        logger.error(f"The future relative number count must stay in bounds [{bounds[0]}, {bounds[1]}] " +
-                      "as this is the maximum that is potentially possible with the current API-values provided by Tibber.")
-        sys.exit(1)
-
-    bounds = (0, 23)
-    if args.past < bounds[0] or args.past > bounds[1]:
-        logger.error(f"The past relative number count must stay in bounds [{bounds[0]}, {bounds[1]}] " +
-                      "as the current cache only stores up to one day of past-time information.")
-        sys.exit(2)
-
-    return args
-
-
 if __name__ == '__main__':
     setup_logger()
 
@@ -354,13 +338,15 @@ if __name__ == '__main__':
     parser.add_argument('--invalid-data-value', type=int, default=-999,
                         help="The value that is sent for the relative fields that have no data available.")
 
-    parser.add_argument('-f', '--future', type=int, default=35,
+    valid_values = range(36)
+    parser.add_argument('-f', '--future', type=int, choices=valid_values, metavar=f"[{min(valid_values)}-{max(valid_values)}]", default=35,
                         help="Maximum number of positive relative entries to send for the future. 0 to disable. E.g. '3' will result in +00, +01 and +02 being sent.")
 
-    parser.add_argument('-p', '--past', type=int, default=23,
+    valid_values = range(48)
+    parser.add_argument('-p', '--past', type=int, choices=valid_values, metavar=f"[{min(valid_values)}-{max(valid_values)}]",default=23,
                         help="Maximum number of negative relative entries to send for the past. 0 to disable. E.g. '3' will result in -03, -02 and -01 being sent.")
 
-    args = validate_args(parser.parse_args())
+    args = parser.parse_args()
 
     logger.setLevel(choice_map[args.log])
 
