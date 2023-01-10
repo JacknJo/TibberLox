@@ -199,7 +199,8 @@ def convert_to_target_unit(price, target_in_euro, precicion):
         return convert_price(price)
 
 
-def get_price_dictionary(tibber_account, home_id, target_price_in_euro, no_invalid_fields=False, precicion=4, invalid_data_value=-1000, use_cache=True):
+def get_price_dictionary(tibber_account, home_id, target_price_in_euro, no_invalid_fields=False, precicion=4,
+                         invalid_data_value=-1000, use_cache=True, number_of_positive_relative_data=35, number_of_negative_relative_data=23):
     subscription = tibber_account.homes[home_id].current_subscription
 
     cache_file = '.tibberlox_cache'
@@ -232,10 +233,10 @@ def get_price_dictionary(tibber_account, home_id, target_price_in_euro, no_inval
     if not no_invalid_fields:
         # Assume there is never more than 23 values in the past and never more than
         # 36 values in the future. First store all values in an invalid state.
-        for i in range(23, 0, -1):
+        for i in range(number_of_negative_relative_data, 0, -1):
             price_information[f"data_price_hour_rel_-{i:02}_amount"] = invalid_data_value
 
-        for i in range(36):
+        for i in range(number_of_positive_relative_data):
             price_information[f"data_price_hour_rel_+{i:02}_amount"] = invalid_data_value
 
     # Merge two lists into one and preserve order.
@@ -249,6 +250,9 @@ def get_price_dictionary(tibber_account, home_id, target_price_in_euro, no_inval
     for price_info in price_information_available:
         price_date = datetime.datetime.fromisoformat(price_info.starts_at).replace(tzinfo=None)
         delta_hour = math.ceil((price_date - now).total_seconds()/3600)
+
+        if delta_hour < -number_of_negative_relative_data or delta_hour >= number_of_positive_relative_data:
+            continue
 
         if delta_hour < 0:
             number_of_valid_negative_relatives += 1
@@ -308,6 +312,22 @@ class SortedDefaultsHelpFormatter(argparse.ArgumentDefaultsHelpFormatter):
         super(argparse.ArgumentDefaultsHelpFormatter, self).add_arguments(actions)
 
 
+def validate_args(args):
+    bounds = (0, 35)
+    if args.future < bounds[0] or args.future > bounds[1]:
+        logger.error(f"The future relative number count must stay in bounds [{bounds[0]}, {bounds[1]}] " +
+                      "as this is the maximum that is potentially possible with the current API-values provided by Tibber.")
+        sys.exit(1)
+
+    bounds = (0, 23)
+    if args.past < bounds[0] or args.past > bounds[1]:
+        logger.error(f"The past relative number count must stay in bounds [{bounds[0]}, {bounds[1]}] " +
+                      "as the current cache only stores up to one day of past-time information.")
+        sys.exit(2)
+
+    return args
+
+
 if __name__ == '__main__':
     setup_logger()
 
@@ -334,7 +354,13 @@ if __name__ == '__main__':
     parser.add_argument('--invalid-data-value', type=int, default=-999,
                         help="The value that is sent for the relative fields that have no data available.")
 
-    args = parser.parse_args()
+    parser.add_argument('-f', '--future', type=int, default=35,
+                        help="Maximum number of positive relative entries to send for the future. 0 to disable. E.g. '3' will result in +00, +01 and +02 being sent.")
+
+    parser.add_argument('-p', '--past', type=int, default=23,
+                        help="Maximum number of negative relative entries to send for the past. 0 to disable. E.g. '3' will result in -03, -02 and -01 being sent.")
+
+    args = validate_args(parser.parse_args())
 
     logger.setLevel(choice_map[args.log])
 
@@ -344,8 +370,10 @@ if __name__ == '__main__':
     # tibber_account.send_push_notification("My title", "Hello! I'm a message!")
 
     time_dict = get_time_dictionary()
-    price_dict = get_price_dictionary(
-        tibber_account, config["home_id"], args.price_unit == "EUR", no_invalid_fields=args.no_invalid_fields, invalid_data_value=args.invalid_data_value, use_cache=not args.no_yesterday_cache)
+    price_dict = get_price_dictionary(tibber_account, config["home_id"], args.price_unit == "EUR", no_invalid_fields=args.no_invalid_fields,
+                                      invalid_data_value=args.invalid_data_value, use_cache=not args.no_yesterday_cache,
+                                      number_of_positive_relative_data=args.future, number_of_negative_relative_data=args.past)
+
     power_dict = get_power_dictionary(tibber_account, config)
 
     information_to_be_sent = merge_dictionaries([time_dict, price_dict, power_dict])
