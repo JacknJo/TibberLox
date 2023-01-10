@@ -12,11 +12,11 @@ import time
 import statistics
 import datetime
 import argparse
+import operator
+import pickle
+from collections import namedtuple
 
 logger = None
-
-# This value will be sent if no valid data is available for a relative entry.
-invalid_data_value = -1000
 
 
 def setup_logger():
@@ -135,26 +135,78 @@ def get_time_dictionary():
     return time_information
 
 
-def format_price(price, price_multiplier, precicion):
-    return round(price * price_multiplier, precicion)
+def calculate_delta_days(datetime_a, isostr_b):
+    datetime_b = datetime.date.fromisoformat(isostr_b)
+    return abs((datetime_a - datetime_b).days)
 
 
-def get_price_dictionary(tibber_account, home_id, target_price_unit, no_invalid_values=False, precicion=4):
+CacheObject = namedtuple("CacheObject", "total currency starts_at")
+
+
+def store_price_history_cache(cache_file, price_info_today, days_to_keep=1):
+    date = datetime.date.today()
+    cache = load_price_history_cache(cache_file)
+    if date.isoformat() in cache:
+        return
+
+    cache[date.isoformat()] = [CacheObject(p.total, p.currency, p.starts_at) for p in price_info_today]
+
+    obsolete_keys = []
+    for k in cache.keys():
+        if calculate_delta_days(date, k) > days_to_keep:
+            obsolete_keys.append(k)
+
+    for o in obsolete_keys:
+        del cache[o]
+
+    with open(cache_file, 'wb') as f:
+        pickle.dump(cache, f)
+
+
+def load_price_history_cache(cache_file):
+    try:
+        with open(cache_file, 'rb') as f:
+            return pickle.load(f)
+    except Exception as e:
+        logger.warning(str(e))
+        return {}
+
+
+def load_yesterday_prices(cache_file):
+    try:
+        yesterday = datetime.date.today() - datetime.timedelta(days=1)
+        cache = load_price_history_cache(cache_file)
+        return cache[yesterday.isoformat()]
+    except Exception as e:
+        logger.warning(str(e))
+        return []
+
+
+def convert_to_target_unit(price, target_in_euro, precicion):
+    def is_euro(unit):
+        return unit.upper() in ["EUR", "EURO", "€"]
+
+    def convert_price(price):
+        price_multiplier_matrix = [
+            [1, 0.01],
+            [100, 1]
+        ]
+        return round(price.total * price_multiplier_matrix[is_euro(price.currency)][target_in_euro], precicion)
+
+    if type(price) is list:
+        return [convert_price(p) for p in price]
+    else:
+        return convert_price(price)
+
+
+def get_price_dictionary(tibber_account, home_id, target_price_in_euro, no_invalid_fields=False, precicion=4,
+                         invalid_data_value=-1000, use_cache=True, number_of_positive_relative_data=35, number_of_negative_relative_data=23):
     subscription = tibber_account.homes[home_id].current_subscription
-    price_info_today = subscription.price_info.today
 
-    euro_list = ["EUR", "EURO", "€"]
-    is_euro = subscription.price_info.current.currency.upper() in euro_list
-    target_price_unit_is_eur = target_price_unit.upper() in euro_list
-
-    price_multiplier_matrix = [
-        [1, 0.01],
-        [100, 1]
-    ]
-    price_multiplier = price_multiplier_matrix[is_euro][target_price_unit_is_eur]
-
-    prices_total = [format_price(p.total, price_multiplier, precicion) for p in price_info_today]
-    price_current = format_price(subscription.price_info.current.total, price_multiplier, precicion)
+    cache_file = '.tibberlox_cache'
+    store_price_history_cache(cache_file, subscription.price_info.today)
+    prices_total = convert_to_target_unit(subscription.price_info.today, target_price_in_euro, precicion)
+    price_current = convert_to_target_unit(subscription.price_info.current, target_price_in_euro, precicion)
 
     price_information = {}
     price_information["price_low"] = min(prices_total)
@@ -163,7 +215,8 @@ def get_price_dictionary(tibber_account, home_id, target_price_unit, no_invalid_
     price_information["price_average"] = round(statistics.mean(prices_total), precicion)
     price_information["price_stdev"] = round(statistics.stdev(prices_total), precicion)
     price_information["price_current"] = price_current
-    price_information["price_unit"] = "EUR" if target_price_unit_is_eur else "Cent"
+    price_information["price_unit"] = "EUR" if target_price_in_euro else "Cent"
+    price_information["price_multiplicator_to_eur"] = 1 if target_price_in_euro else 0.01
 
     logger.info(f"Sending price information in '{price_information['price_unit']}'.")
     logger.info(
@@ -176,33 +229,39 @@ def get_price_dictionary(tibber_account, home_id, target_price_unit, no_invalid_
     for i, p in enumerate(prices_total):
         price_information[f"data_price_hour_abs_{i:02}_amount"] = p
 
-    # Merge two lists into one and preserve order.
-    price_information_available = subscription.price_info.today + subscription.price_info.tomorrow
-    now = datetime.datetime.now()
-
     # Setting this variable to False will cause to only valid send valid values and skip the placeholders.
-    if not no_invalid_values:
+    if not no_invalid_fields:
         # Assume there is never more than 23 values in the past and never more than
         # 36 values in the future. First store all values in an invalid state.
-        for i in range(23, 0, -1):
+        for i in range(number_of_negative_relative_data, 0, -1):
             price_information[f"data_price_hour_rel_-{i:02}_amount"] = invalid_data_value
 
-        for i in range(36):
+        for i in range(number_of_positive_relative_data):
             price_information[f"data_price_hour_rel_+{i:02}_amount"] = invalid_data_value
+
+    # Merge two lists into one and preserve order.
+    prices_yesterday = load_yesterday_prices(cache_file)
+
+    price_information_available = prices_yesterday + subscription.price_info.today + subscription.price_info.tomorrow
+    now = datetime.datetime.now()
 
     number_of_valid_negative_relatives = 0
     number_of_valid_positive_relatives = 0
-    for i, price_info in enumerate(price_information_available):
-        isoformat = datetime.datetime.fromisoformat(price_info.starts_at).replace(tzinfo=None)
-        delta_hour = math.ceil((isoformat - now).total_seconds()/3600)
-        sign = '-' if delta_hour < 0 else '+'
+    for price_info in price_information_available:
+        price_date = datetime.datetime.fromisoformat(price_info.starts_at).replace(tzinfo=None)
+        delta_hour = math.ceil((price_date - now).total_seconds()/3600)
+
+        if delta_hour < -number_of_negative_relative_data or delta_hour >= number_of_positive_relative_data:
+            continue
+
         if delta_hour < 0:
             number_of_valid_negative_relatives += 1
         else:
             number_of_valid_positive_relatives += 1
 
-        price_information[f"data_price_hour_rel_{sign}{abs(delta_hour):02}_amount"] = format_price(
-            price_info.total, price_multiplier, precicion)
+        sign = '-' if delta_hour < 0 else '+'
+        key = f"data_price_hour_rel_{sign}{abs(delta_hour):02}_amount"
+        price_information[key] = convert_to_target_unit(price_info, target_price_in_euro, precicion)
 
     price_information["data_price_hour_rel_num_negatives"] = number_of_valid_negative_relatives
     price_information["data_price_hour_rel_num_positives"] = number_of_valid_positive_relatives
@@ -244,22 +303,49 @@ def send_to_destination(config, key_value_dictionary):
             logger.debug(f"Sent the following string:\n" + string_to_be_sent_formatted)
 
 
+class SortedDefaultsHelpFormatter(argparse.ArgumentDefaultsHelpFormatter):
+    def add_arguments(self, actions):
+        actions = sorted(actions, key=operator.attrgetter('option_strings'))
+        long_options = [a for a in actions if operator.attrgetter('option_strings')(a)[0].startswith('--')]
+        short_options = [a for a in actions if not operator.attrgetter('option_strings')(a)[0].startswith('--')]
+        actions = short_options + long_options
+        super(argparse.ArgumentDefaultsHelpFormatter, self).add_arguments(actions)
+
+
 if __name__ == '__main__':
     setup_logger()
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser = argparse.ArgumentParser(formatter_class=SortedDefaultsHelpFormatter)
     choice_map = {"DEBUG": logging.DEBUG, "INFO": logging.INFO, "WARNING": logging.WARNING, "ERROR": logging.ERROR}
-    parser.add_argument('-l', '--log', help="Logging level for the application.",
-                        choices=choice_map.keys(), default="INFO")
-    parser.add_argument(
-        '-c', '--config', help=f"The filename of the configuration file in use, relative to {script_dir}", type=str, default=".tibberlox_config")
-    parser.add_argument(
-        '--no-ping-check', help='Skip the validation of entered ip addresses by using the ping command.', action="store_true")
-    parser.add_argument('--no-invalid-values',
-                        help=f'By default all relative value fileds are sent, even if no data is available. Invalid data is indicated by a value of {invalid_data_value}.', action="store_true")
-    parser.add_argument('--price-unit', help="The price unit sent in the UDP interface",
-                        choices=["EUR", "Cent"], default="EUR")
+
+    parser.add_argument('-l', '--log', choices=choice_map.keys(), default="INFO", help="Logging level for the application.")
+
+    parser.add_argument('-c', '--config', type=str, default=".tibberlox_config",
+                        help=f"The filename of the configuration file in use, relative to {script_dir}")
+
+    parser.add_argument('--no-ping-check', action="store_true",
+                        help='Skip the validation of entered ip addresses by using the ping command.')
+
+    parser.add_argument('--no-invalid-fields', action="store_true",
+                        help=f'By default all relative value fileds [-23, +36] are sent, even if no data is available.')
+
+    parser.add_argument('--no-yesterday-cache', action="store_true",
+                        help="Do not cache the price values from the day before to always provide past 23h of relative data.")
+
+    parser.add_argument('--price-unit', choices=["EUR", "Cent"], default="EUR",  help="The price unit sent in the UDP interface")
+
+    parser.add_argument('--invalid-data-value', type=int, default=-999,
+                        help="The value that is sent for the relative fields that have no data available.")
+
+    valid_values = range(36)
+    parser.add_argument('-f', '--future', type=int, choices=valid_values, metavar=f"[{min(valid_values)}-{max(valid_values)}]", default=35,
+                        help="Maximum number of positive relative entries to send for the future. 0 to disable. E.g. '3' will result in +00, +01 and +02 being sent.")
+
+    valid_values = range(48)
+    parser.add_argument('-p', '--past', type=int, choices=valid_values, metavar=f"[{min(valid_values)}-{max(valid_values)}]",default=23,
+                        help="Maximum number of negative relative entries to send for the past. 0 to disable. E.g. '3' will result in -03, -02 and -01 being sent.")
+
     args = parser.parse_args()
 
     logger.setLevel(choice_map[args.log])
@@ -270,8 +356,10 @@ if __name__ == '__main__':
     # tibber_account.send_push_notification("My title", "Hello! I'm a message!")
 
     time_dict = get_time_dictionary()
-    price_dict = get_price_dictionary(
-        tibber_account, config["home_id"], args.price_unit, no_invalid_values=args.no_invalid_values)
+    price_dict = get_price_dictionary(tibber_account, config["home_id"], args.price_unit == "EUR", no_invalid_fields=args.no_invalid_fields,
+                                      invalid_data_value=args.invalid_data_value, use_cache=not args.no_yesterday_cache,
+                                      number_of_positive_relative_data=args.future, number_of_negative_relative_data=args.past)
+
     power_dict = get_power_dictionary(tibber_account, config)
 
     information_to_be_sent = merge_dictionaries([time_dict, price_dict, power_dict])
