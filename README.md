@@ -61,6 +61,7 @@ Die folgenden Elemente wurden zusätzlich hinzugefügt:
 - `price_stdev` Standardabweichung der Preise des aktuellen Tages
 - `data_price_hour_rel_num_negatives` Anzahl der validen negativen Relativwerte (invalide Werte tragen den Wert -1000).
 - `data_price_hour_rel_num_positives` Anzahl der validen positiven Relativwerte (invalide Werte tragen den Wert -1000).
+- `price_multiplicator_to_eur` Multiplicator um die per UDP empfangenen Preiswerte in EURO umzurechnen.
 
 
 ## English
