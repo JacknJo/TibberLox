@@ -159,7 +159,7 @@ def store_price_history_cache(cache_file, price_info_today, days_to_keep=10000):
         del cache[o]
 
     with open(cache_file, 'w') as f:
-        json.dump(cache, f)
+        json.dump(cache, f, indent=4)
 
 
 def load_price_history_cache(cache_file):
