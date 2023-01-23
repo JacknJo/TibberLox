@@ -13,7 +13,6 @@ import statistics
 import datetime
 import argparse
 import operator
-import pickle
 from collections import namedtuple
 
 logger = None
@@ -143,7 +142,7 @@ def calculate_delta_days(datetime_a, isostr_b):
 CacheObject = namedtuple("CacheObject", "total currency starts_at")
 
 
-def store_price_history_cache(cache_file, price_info_today, days_to_keep=1):
+def store_price_history_cache(cache_file, price_info_today, days_to_keep=10000):
     date = datetime.date.today()
     cache = load_price_history_cache(cache_file)
     if date.isoformat() in cache:
@@ -159,14 +158,14 @@ def store_price_history_cache(cache_file, price_info_today, days_to_keep=1):
     for o in obsolete_keys:
         del cache[o]
 
-    with open(cache_file, 'wb') as f:
-        pickle.dump(cache, f)
+    with open(cache_file, 'w') as f:
+        json.dump(cache, f)
 
 
 def load_price_history_cache(cache_file):
     try:
-        with open(cache_file, 'rb') as f:
-            return pickle.load(f)
+        with open(cache_file, 'r') as f:
+            return json.load(f)
     except Exception as e:
         logger.warning(str(e))
         return {}
@@ -200,11 +199,11 @@ def convert_to_target_unit(price, target_in_euro, precicion):
 
 
 def get_price_dictionary(tibber_account, home_id, target_price_in_euro, no_invalid_fields=False, precicion=4,
-                         invalid_data_value=-1000, use_cache=True, number_of_positive_relative_data=35, number_of_negative_relative_data=23):
+                         invalid_data_value=-1000, use_cache=True, number_of_positive_relative_data=35, number_of_negative_relative_data=23, history_length=10):
     subscription = tibber_account.homes[home_id].current_subscription
 
-    cache_file = '.tibberlox_cache'
-    store_price_history_cache(cache_file, subscription.price_info.today)
+    cache_file = 'tibberlox_cache.json'
+    store_price_history_cache(cache_file, subscription.price_info.today, days_to_keep=history_length)
     prices_total = convert_to_target_unit(subscription.price_info.today, target_price_in_euro, precicion)
     price_current = convert_to_target_unit(subscription.price_info.current, target_price_in_euro, precicion)
 
@@ -346,6 +345,11 @@ if __name__ == '__main__':
     parser.add_argument('-p', '--past', type=int, choices=valid_values, metavar=f"[{min(valid_values)}-{max(valid_values)}]",default=23,
                         help="Maximum number of negative relative entries to send for the past. 0 to disable. E.g. '3' will result in -03, -02 and -01 being sent.")
 
+    valid_values = range(10000)
+    parser.add_argument('--history-length', type=int, choices=valid_values, metavar=f"[{min(valid_values)}-{max(valid_values)}]",default=365,
+                        help="The number of history entries (days) to store.")
+
+
     args = parser.parse_args()
 
     logger.setLevel(choice_map[args.log])
@@ -358,7 +362,7 @@ if __name__ == '__main__':
     time_dict = get_time_dictionary()
     price_dict = get_price_dictionary(tibber_account, config["home_id"], args.price_unit == "EUR", no_invalid_fields=args.no_invalid_fields,
                                       invalid_data_value=args.invalid_data_value, use_cache=not args.no_yesterday_cache,
-                                      number_of_positive_relative_data=args.future, number_of_negative_relative_data=args.past)
+                                      number_of_positive_relative_data=args.future, number_of_negative_relative_data=args.past, history_length=args.history_length)
 
     power_dict = get_power_dictionary(tibber_account, config)
 
