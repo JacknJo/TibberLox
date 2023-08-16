@@ -7,15 +7,43 @@ import logging
 import subprocess
 import sys
 import socket
-import tibber
 import time
 import statistics
 import datetime
 import argparse
 import operator
 from collections import namedtuple
+try:
+    import tibber
+except:
+    pass
 
 logger = None
+
+physical_script_directory = os.path.dirname(os.path.realpath(os.path.abspath(__file__)))
+venv_dir = os.path.join(physical_script_directory, '.venv')
+venv_python_exe = os.path.join(venv_dir, 'bin', 'python')
+
+
+def in_venv():
+    return sys.prefix != sys.base_prefix
+
+
+def setup_virtual_envionment():
+    if not os.path.isdir(venv_dir):
+        subprocess.run(f'python3 -m venv {venv_dir}', shell=True, cwd=physical_script_directory)
+        venv_python_exe = os.path.join(venv_dir, 'bin', 'python')
+        print(subprocess.run(f'{venv_python_exe} -m ensurepip', shell=True))
+        print(subprocess.run(f'{venv_python_exe} -m pip install -r requirements.txt', shell=True, cwd=physical_script_directory))
+
+
+def run_in_venv():
+    if not in_venv():
+        real_abs_file = os.path.realpath(os.path.abspath(__file__))
+        print(f'Restarting the process in virtual environment: {venv_python_exe}')
+        print(sys.argv[0])
+        subprocess.run([venv_python_exe, real_abs_file] + sys.argv[1:])
+        sys.exit()
 
 
 def setup_logger():
@@ -313,6 +341,8 @@ class SortedDefaultsHelpFormatter(argparse.ArgumentDefaultsHelpFormatter):
 
 if __name__ == '__main__':
     setup_logger()
+    setup_virtual_envionment()
+    run_in_venv()
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
     parser = argparse.ArgumentParser(formatter_class=SortedDefaultsHelpFormatter)
@@ -342,13 +372,12 @@ if __name__ == '__main__':
                         help="Maximum number of positive relative entries to send for the future. 0 to disable. E.g. '3' will result in +00, +01 and +02 being sent.")
 
     valid_values = range(48)
-    parser.add_argument('-p', '--past', type=int, choices=valid_values, metavar=f"[{min(valid_values)}-{max(valid_values)}]",default=23,
+    parser.add_argument('-p', '--past', type=int, choices=valid_values, metavar=f"[{min(valid_values)}-{max(valid_values)}]", default=23,
                         help="Maximum number of negative relative entries to send for the past. 0 to disable. E.g. '3' will result in -03, -02 and -01 being sent.")
 
     valid_values = range(10000)
-    parser.add_argument('--history-length', type=int, choices=valid_values, metavar=f"[{min(valid_values)}-{max(valid_values)}]",default=365,
+    parser.add_argument('--history-length', type=int, choices=valid_values, metavar=f"[{min(valid_values)}-{max(valid_values)}]", default=365,
                         help="The number of history entries (days) to store.")
-
 
     args = parser.parse_args()
 
