@@ -42,7 +42,7 @@ def run_in_venv():
         real_abs_file = os.path.realpath(os.path.abspath(__file__))
         print(f'Restarting the process in virtual environment: {venv_python_exe}')
         print(sys.argv[0])
-        subprocess.run([venv_python_exe, real_abs_file] + sys.argv[1:])
+        subprocess.run([venv_python_exe, real_abs_file] + sys.argv[1:], cwd=physical_script_directory)
         sys.exit()
 
 
@@ -203,7 +203,8 @@ def load_yesterday_prices(cache_file):
     try:
         yesterday = datetime.date.today() - datetime.timedelta(days=1)
         cache = load_price_history_cache(cache_file)
-        return cache[yesterday.isoformat()]
+        yesterday_cache = cache[yesterday.isoformat()]
+        return [CacheObject(*e) for e in yesterday_cache]
     except Exception as e:
         logger.warning(str(e))
         return []
