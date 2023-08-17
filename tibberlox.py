@@ -365,7 +365,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--price-unit', choices=["EUR", "Cent"], default="EUR",  help="The price unit sent in the UDP interface")
 
-    parser.add_argument('--invalid-data-value', type=int, default=-999,
+    parser.add_argument('--invalid-data-value', type=int, default=999,
                         help="The value that is sent for the relative fields that have no data available.")
 
     valid_values = range(36)
