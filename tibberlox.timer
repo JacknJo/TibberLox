@@ -1,0 +1,10 @@
+[Unit]
+Description=Run tibberlox cyclically.
+
+[Timer]
+OnBootSec=1
+#OnUnitActiveSec=60
+OnCalendar=*-*-* *:59:40
+
+[Install]
+WantedBy=timers.target

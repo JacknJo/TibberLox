@@ -392,7 +392,7 @@ if __name__ == '__main__':
     parser.add_argument('--history-length', type=int, choices=valid_values, metavar=f"[{min(valid_values)}-{max(valid_values)}]", default=365,
                         help="The number of history entries (days) to store.")
 
-    parser.add_argument('--time-shift', type=int, default=70,
+    parser.add_argument('--time-shift', type=int, default=30,
                         help="Modify system time to be slightly ahead or behind the correct time. This allows the miniserver to have the correct time available at the hour tick")
 
     args = parser.parse_args()
