@@ -1,1 +1,3 @@
 tibber.py
+plotly
+pandas

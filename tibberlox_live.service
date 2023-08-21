@@ -1,0 +1,16 @@
+[Unit]
+Description=This unit forwards the live measurements of the pulse unit
+After=network.target
+Wants=network-online.target
+
+[Service]
+Restart=always
+RestartSec=10
+Type=simple
+ExecStart=/usr/bin/python3 /home/pi/tibberlox/report_live_measurements.py
+User=pi
+Environment=
+WorkingDirectory=/home/pi/tibberlox
+
+[Install]
+WantedBy=multi-user.target
