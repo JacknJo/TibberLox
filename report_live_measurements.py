@@ -51,12 +51,11 @@ if __name__ == '__main__':
 
         send_string = json.dumps(send_datagram).replace('"', '').replace("'", '').encode()
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-
-        host = d['ip']
-        port = d['port'] + 1
-        print(f"Sending to {host}:{port}")
         print(send_string)
         for d in config['destinations']:
+            host = d['ip']
+            port = d['port'] + 1
+            print(f"Sending to {host}:{port}")
             s.sendto(send_string, (host, port))
 
     home.start_live_feed(user_agent="UserAgent/0.0.1")
