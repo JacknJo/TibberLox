@@ -15,7 +15,7 @@ logger = None
 if __name__ == '__main__':
     logger = setup_logger()
     setup_virtual_envionment()
-    run_in_venv()
+    run_in_venv(__file__)
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
     parser = argparse.ArgumentParser(formatter_class=SortedDefaultsHelpFormatter)
