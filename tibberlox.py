@@ -49,9 +49,11 @@ def setup_virtual_envionment():
         print(subprocess.run(f'{venv_python_exe} -m pip install -r requirements.txt', shell=True, cwd=physical_script_directory))
 
 
-def run_in_venv():
+def run_in_venv(file_to_run):
+    if file_to_run is None:
+        file_to_run == __file__
     if not in_venv():
-        real_abs_file = os.path.realpath(os.path.abspath(__file__))
+        real_abs_file = os.path.realpath(os.path.abspath(file_to_run))
         print(f'Restarting the process in virtual environment: {venv_python_exe}')
         print(sys.argv[0])
         subprocess.run([venv_python_exe, real_abs_file] + sys.argv[1:], cwd=physical_script_directory)
@@ -72,7 +74,7 @@ def setup_logger():
     formatter = CustomFormatter('%(message)s')
     stream_handler.setFormatter(formatter)
     logger.addHandler(stream_handler)
-
+    return logger
 
 def home_to_string(home):
     return f"{home.address1}, {home.postal_code} {home.city}, {home.country}"
