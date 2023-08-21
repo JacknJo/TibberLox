@@ -25,6 +25,18 @@ venv_dir = os.path.join(physical_script_directory, '.venv')
 venv_python_exe = os.path.join(venv_dir, 'bin', 'python')
 
 
+# Be slightly ahead of time. If we send cyclically every minute, this ensures at the new full hour trigger the correct prices are given.
+global_time_compensation_seconds = 70
+
+
+def faketime_today():
+    return faketime_now().date()
+
+
+def faketime_now():
+    return datetime.datetime.now() + datetime.timedelta(seconds=global_time_compensation_seconds)
+
+
 def in_venv():
     return sys.prefix != sys.base_prefix
 
@@ -152,7 +164,7 @@ def load_or_create_json_config(config_file_name, skip_destination_ping=False):
 
 def get_time_dictionary():
     time_information = {}
-    today = datetime.date.today()
+    today = faketime_today()
     time_information["date_now"] = str(today)
     time_information["date_now_epoch"] = time.mktime(today.timetuple())
     time_information["date_now_seconds_since_epoch"] = int(time.time())
@@ -171,7 +183,7 @@ CacheObject = namedtuple("CacheObject", "total currency starts_at")
 
 
 def store_price_history_cache(cache_file, price_info_today, days_to_keep=10000):
-    date = datetime.date.today()
+    date = faketime_today()
     cache = load_price_history_cache(cache_file)
     if date.isoformat() in cache:
         return
@@ -206,7 +218,7 @@ def load_yesterday_prices(cache_file):
         yesterday_cache = cache[yesterday.isoformat()]
         return [CacheObject(*e) for e in yesterday_cache]
     except Exception as e:
-        logger.warning(str(e))
+        logger.warning("Failed to load prices from yesterday: " + str(e))
         return []
 
 
@@ -271,7 +283,7 @@ def get_price_dictionary(tibber_account, home_id, target_price_in_euro, no_inval
     prices_yesterday = load_yesterday_prices(cache_file)
 
     price_information_available = prices_yesterday + subscription.price_info.today + subscription.price_info.tomorrow
-    now = datetime.datetime.now()
+    now = faketime_now()
 
     number_of_valid_negative_relatives = 0
     number_of_valid_positive_relatives = 0
@@ -380,9 +392,17 @@ if __name__ == '__main__':
     parser.add_argument('--history-length', type=int, choices=valid_values, metavar=f"[{min(valid_values)}-{max(valid_values)}]", default=365,
                         help="The number of history entries (days) to store.")
 
+    parser.add_argument('--time-shift', type=int, default=70,
+                        help="Modify system time to be slightly ahead or behind the correct time. This allows the miniserver to have the correct time available at the hour tick")
+
     args = parser.parse_args()
+    global_time_compensation_seconds = args.time_shift
 
     logger.setLevel(choice_map[args.log])
+
+    logger.info("Realtime: " + str(datetime.datetime.now()))
+    logger.info("Time offset: " + str(global_time_compensation_seconds) + " [s]")
+    logger.info("Using faketime: " + str(faketime_now()))
 
     config = load_or_create_json_config(os.path.join(script_dir, args.config), skip_destination_ping=args.no_ping_check)
 
