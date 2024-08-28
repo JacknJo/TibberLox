@@ -26,7 +26,7 @@ venv_python_exe = os.path.join(venv_dir, 'bin', 'python')
 
 
 # Be slightly ahead of time. If we send cyclically every minute, this ensures at the new full hour trigger the correct prices are given.
-global_time_compensation_seconds = 70
+global_time_compensation_seconds = 0 # overwritten by cli-argument
 
 
 def faketime_today():
@@ -49,9 +49,10 @@ def setup_virtual_envionment():
         print(subprocess.run(f'{venv_python_exe} -m pip install -r requirements.txt', shell=True, cwd=physical_script_directory))
 
 
-def run_in_venv(file_to_run):
+def run_in_venv(file_to_run = None):
     if file_to_run is None:
-        file_to_run == __file__
+        file_to_run = __file__
+
     if not in_venv():
         real_abs_file = os.path.realpath(os.path.abspath(file_to_run))
         print(f'Restarting the process in virtual environment: {venv_python_exe}')
@@ -75,7 +76,6 @@ def setup_logger():
     stream_handler.setFormatter(formatter)
     logger.addHandler(stream_handler)
     return logger
-
 
 def home_to_string(home):
     return f"{home.address1}, {home.postal_code} {home.city}, {home.country}"
@@ -249,7 +249,6 @@ def get_price_dictionary(tibber_account, home_id, target_price_in_euro, no_inval
     cache_file = 'tibberlox_cache.json'
     store_price_history_cache(cache_file, subscription.price_info.today, days_to_keep=history_length)
     prices_total = convert_to_target_unit(subscription.price_info.today, target_price_in_euro, precicion)
-    price_current = convert_to_target_unit(subscription.price_info.current, target_price_in_euro, precicion)
 
     price_information = {}
     price_information["price_low"] = min(prices_total)
@@ -257,13 +256,10 @@ def get_price_dictionary(tibber_account, home_id, target_price_in_euro, no_inval
     price_information["price_median"] = round(statistics.median(prices_total), precicion)
     price_information["price_average"] = round(statistics.mean(prices_total), precicion)
     price_information["price_stdev"] = round(statistics.stdev(prices_total), precicion)
-    price_information["price_current"] = price_current
     price_information["price_unit"] = "EUR" if target_price_in_euro else "Cent"
     price_information["price_multiplicator_to_eur"] = 1 if target_price_in_euro else 0.01
 
     logger.info(f"Sending price information in '{price_information['price_unit']}'.")
-    logger.info(
-        f"Overview: {{ current: {price_information['price_current']}, avg: {price_information['price_average']}, low: {price_information['price_low']}, high: {price_information['price_high']} }}")
 
     prices_total_sorted = sorted(prices_total)
     for i, p in enumerate(prices_total_sorted):
@@ -290,24 +286,38 @@ def get_price_dictionary(tibber_account, home_id, target_price_in_euro, no_inval
 
     number_of_valid_negative_relatives = 0
     number_of_valid_positive_relatives = 0
+    sum_positive = 0
     for price_info in price_information_available:
         price_date = datetime.datetime.fromisoformat(price_info.starts_at).replace(tzinfo=None)
         delta_hour = math.ceil((price_date - now).total_seconds()/3600)
 
+        price = convert_to_target_unit(price_info, target_price_in_euro, precicion)
+        if delta_hour == 0:
+            price_information["price_current"] = price
+
         if delta_hour < -number_of_negative_relative_data or delta_hour >= number_of_positive_relative_data:
             continue
+
+        sign = '-' if delta_hour < 0 else '+'
+        key = f"data_price_hour_rel_{sign}{abs(delta_hour):02}_amount"
+
+        price_information[key] = price
 
         if delta_hour < 0:
             number_of_valid_negative_relatives += 1
         else:
             number_of_valid_positive_relatives += 1
-
-        sign = '-' if delta_hour < 0 else '+'
-        key = f"data_price_hour_rel_{sign}{abs(delta_hour):02}_amount"
-        price_information[key] = convert_to_target_unit(price_info, target_price_in_euro, precicion)
+            sum_positive += price_information[key]
 
     price_information["data_price_hour_rel_num_negatives"] = number_of_valid_negative_relatives
     price_information["data_price_hour_rel_num_positives"] = number_of_valid_positive_relatives
+
+    for i in range(number_of_valid_positive_relatives,number_of_positive_relative_data):
+        price_information[f"data_price_hour_rel_+{i:02}_amount"] = sum_positive / number_of_valid_positive_relatives
+
+    logger.info(
+        f"Overview: {{ current: {price_information['price_current']}, avg: {price_information['price_average']}, low: {price_information['price_low']}, high: {price_information['price_high']} }}")
+
     return price_information
 
 
@@ -358,7 +368,7 @@ class SortedDefaultsHelpFormatter(argparse.ArgumentDefaultsHelpFormatter):
 if __name__ == '__main__':
     setup_logger()
     setup_virtual_envionment()
-    run_in_venv(__file__)
+    run_in_venv()
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
     parser = argparse.ArgumentParser(formatter_class=SortedDefaultsHelpFormatter)
@@ -380,7 +390,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--price-unit', choices=["EUR", "Cent"], default="EUR",  help="The price unit sent in the UDP interface")
 
-    parser.add_argument('--invalid-data-value', type=int, default=999,
+    parser.add_argument('--invalid-data-value', type=int, default=-1,
                         help="The value that is sent for the relative fields that have no data available.")
 
     valid_values = range(36)
