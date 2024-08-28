@@ -6,10 +6,10 @@ Wants=network-online.target
 [Service]
 Restart=no
 Type=simple
-ExecStart=/usr/bin/python3 /home/pi/tibberlox/tibberlox.py
+ExecStart=/usr/bin/python3 /home/pi/TibberLox/tibberlox.py
 User=pi
 Environment=
-WorkingDirectory=/home/pi/tibberlox
+WorkingDirectory=/home/pi/TibberLox
 
 [Install]
 WantedBy=multi-user.target
