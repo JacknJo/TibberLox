@@ -1,5 +1,5 @@
 .tibber_credentials
 .tibberlox_config
-.tibberlox_cache
+tibberlox_cache.json
 .vscode
 .venv
