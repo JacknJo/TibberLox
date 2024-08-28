@@ -185,7 +185,7 @@ def calculate_delta_days(datetime_a, isostr_b):
 CacheObject = namedtuple("CacheObject", "total currency starts_at")
 
 
-def store_price_history_cache(cache_file, price_info_today, days_to_keep=10000):
+def store_price_history_cache(cache_file, price_info_today, days_to_keep=7):
     date = faketime_today()
     cache = load_price_history_cache(cache_file)
     if date.isoformat() in cache:
