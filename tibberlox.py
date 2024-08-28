@@ -76,6 +76,7 @@ def setup_logger():
     logger.addHandler(stream_handler)
     return logger
 
+
 def home_to_string(home):
     return f"{home.address1}, {home.postal_code} {home.city}, {home.country}"
 
@@ -357,7 +358,7 @@ class SortedDefaultsHelpFormatter(argparse.ArgumentDefaultsHelpFormatter):
 if __name__ == '__main__':
     setup_logger()
     setup_virtual_envionment()
-    run_in_venv()
+    run_in_venv(__file__)
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
     parser = argparse.ArgumentParser(formatter_class=SortedDefaultsHelpFormatter)
